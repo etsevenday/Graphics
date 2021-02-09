@@ -207,6 +207,8 @@ namespace UnityEngine.Rendering.HighDefinition
         UberPost,
         FXAA,
         SMAA,
+        SceneUpsampling,
+        SetResolutionGroup,
         FinalPost,
         FinalImageHistogram,
         CustomPostProcessBeforeTAA,
