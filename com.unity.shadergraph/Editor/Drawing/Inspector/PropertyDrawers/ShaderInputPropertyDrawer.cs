@@ -54,6 +54,8 @@ namespace UnityEditor.ShaderGraph.Drawing.Inspector.PropertyDrawers
         Toggle exposedToggle;
         VisualElement keywordScopeField;
 
+        string ReferenceDisallowedPattern = @"(?:[^A-Za-z_0-9_])";
+
         public ShaderInputPropertyDrawer()
         {
             greyLabel = new GUIStyle(EditorStyles.label);
@@ -1208,18 +1210,25 @@ namespace UnityEditor.ShaderGraph.Drawing.Inspector.PropertyDrawers
                 Rect displayRect = new Rect(rect.x, rect.y, rect.width / 2, EditorGUIUtility.singleLineHeight);
                 var displayName = EditorGUI.DelayedTextField(displayRect, entry.displayName, EditorStyles.label);
                 //This is gross but I cant find any other way to make a DelayedTextField have a tooltip (tried doing the empty label on the field itself and it didnt work either)
-                EditorGUI.LabelField(displayRect, new GUIContent("", "Enum keyword display names can only use alphanumeric characters and `_`"));
+                EditorGUI.LabelField(displayRect, new GUIContent("", "Enum keyword display names can only use alphanumeric characters, whitespace and `_`"));
                 var referenceName = EditorGUI.TextField(new Rect(rect.x + rect.width / 2, rect.y, rect.width / 2, EditorGUIUtility.singleLineHeight), entry.referenceName,
                     keyword.isBuiltIn ? EditorStyles.label : greyLabel);
 
-                displayName = GetDuplicateSafeDisplayName(entry.id, displayName);
-                referenceName = GetDuplicateSafeReferenceName(entry.id, displayName.ToUpper());
-
                 if (EditorGUI.EndChangeCheck())
                 {
-                    keyword.entries[index] = new KeywordEntry(index + 1, displayName, referenceName);
+                    displayName = displayName.Trim();
+                    referenceName = GetSanitizedReferenceName(displayName.ToUpper());
+                    var duplicateIndex = FindDuplicateReferenceNameIndex(entry.id, referenceName);
+                    if (duplicateIndex != -1)
+                    {
+                        var duplicateEntry = ((KeywordEntry)m_KeywordReorderableList.list[duplicateIndex]);
+                        Debug.LogWarning($"Display name '{displayName}' will create the reference name '{referenceName}' which conflicts with the existing display name '{duplicateEntry.displayName}' at index {duplicateIndex}.");
+                    }   
+                    else if (string.IsNullOrWhiteSpace(displayName))
+                        Debug.LogWarning("Invalid display name. Display names cannot be empty or all whitespace.");
+                    else
+                        keyword.entries[index] = new KeywordEntry(index + 1, displayName, referenceName);
 
-                    // Rebuild();
                     this._postChangeValueCallback(true);
                 }
             };
@@ -1338,7 +1347,20 @@ namespace UnityEditor.ShaderGraph.Drawing.Inspector.PropertyDrawers
         {
             name = name.Trim();
             var entryList = m_KeywordReorderableList.list as List<KeywordEntry>;
-            return GraphUtil.SanitizeName(entryList.Where(p => p.id != id).Select(p => p.referenceName), "{0}_{1}", name, @"(?:[^A-Za-z_0-9_])");
+            return GraphUtil.SanitizeName(entryList.Where(p => p.id != id).Select(p => p.referenceName), "{0}_{1}", name, ReferenceDisallowedPattern);
         }
+
+        string GetSanitizedReferenceName(string name)
+        {
+            name = name.Trim();
+            return Regex.Replace(name, ReferenceDisallowedPattern, "_");
+        }
+
+        int FindDuplicateReferenceNameIndex(int id, string referenceName)
+        {
+            var entryList = m_KeywordReorderableList.list as List<KeywordEntry>;
+            return entryList.FindIndex(entry => entry.id != id && entry.referenceName == referenceName);
+        }
+
     }
 }
