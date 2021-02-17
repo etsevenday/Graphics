@@ -54,7 +54,8 @@ namespace UnityEditor.ShaderGraph.Drawing.Inspector.PropertyDrawers
         Toggle exposedToggle;
         VisualElement keywordScopeField;
 
-        string ReferenceDisallowedPattern = @"(?:[^A-Za-z_0-9_])";
+        string DisplayNameDisallowedPattern = "[^\\w_#() .]";
+        string ReferenceNameDisallowedPattern = @"(?:[^A-Za-z_0-9_])";
 
         public ShaderInputPropertyDrawer()
         {
@@ -1216,16 +1217,18 @@ namespace UnityEditor.ShaderGraph.Drawing.Inspector.PropertyDrawers
 
                 if (EditorGUI.EndChangeCheck())
                 {
-                    displayName = displayName.Trim();
+                    displayName = GetSanitizedDisplayName(displayName);
                     referenceName = GetSanitizedReferenceName(displayName.ToUpper());
                     var duplicateIndex = FindDuplicateReferenceNameIndex(entry.id, referenceName);
                     if (duplicateIndex != -1)
                     {
                         var duplicateEntry = ((KeywordEntry)m_KeywordReorderableList.list[duplicateIndex]);
-                        Debug.LogWarning($"Display name '{displayName}' will create the reference name '{referenceName}' which conflicts with the existing display name '{duplicateEntry.displayName}' at index {duplicateIndex}.");
-                    }   
+                        Debug.LogWarning($"Display name '{displayName}' will create the same reference name '{referenceName}' as entry {duplicateIndex + 1} with display name '{duplicateEntry.displayName}'.");
+                    }
                     else if (string.IsNullOrWhiteSpace(displayName))
                         Debug.LogWarning("Invalid display name. Display names cannot be empty or all whitespace.");
+                    else if (int.TryParse(displayName, out int intVal) || float.TryParse(displayName, out float floatVal))
+                        Debug.LogWarning("Invalid display name. Display names cannot be valid integer or floating point numbers.");
                     else
                         keyword.entries[index] = new KeywordEntry(index + 1, displayName, referenceName);
 
@@ -1340,20 +1343,26 @@ namespace UnityEditor.ShaderGraph.Drawing.Inspector.PropertyDrawers
         {
             name = name.Trim();
             var entryList = m_KeywordReorderableList.list as List<KeywordEntry>;
-            return GraphUtil.SanitizeName(entryList.Where(p => p.id != id).Select(p => p.displayName), "{0} ({1})", name, "[^\\w_#() .]");
+            return GraphUtil.SanitizeName(entryList.Where(p => p.id != id).Select(p => p.displayName), "{0} ({1})", name, DisplayNameDisallowedPattern);
+        }
+
+        string GetSanitizedDisplayName(string name)
+        {
+            name = name.Trim();
+            return Regex.Replace(name, DisplayNameDisallowedPattern, "_");
         }
 
         public string GetDuplicateSafeReferenceName(int id, string name)
         {
             name = name.Trim();
             var entryList = m_KeywordReorderableList.list as List<KeywordEntry>;
-            return GraphUtil.SanitizeName(entryList.Where(p => p.id != id).Select(p => p.referenceName), "{0}_{1}", name, ReferenceDisallowedPattern);
+            return GraphUtil.SanitizeName(entryList.Where(p => p.id != id).Select(p => p.referenceName), "{0}_{1}", name, ReferenceNameDisallowedPattern);
         }
 
         string GetSanitizedReferenceName(string name)
         {
             name = name.Trim();
-            return Regex.Replace(name, ReferenceDisallowedPattern, "_");
+            return Regex.Replace(name, ReferenceNameDisallowedPattern, "_");
         }
 
         int FindDuplicateReferenceNameIndex(int id, string referenceName)
